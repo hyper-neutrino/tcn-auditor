@@ -404,7 +404,11 @@ async function audit() {
 }
 
 async function user_info(user) {
-    const member = hq.members.cache.get(user.id);
+    let member;
+
+    try {
+        member = await hq.member.fetch(user.id);
+    } catch {}
 
     try {
         let api_user;
