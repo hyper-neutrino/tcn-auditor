@@ -1,5 +1,5 @@
 {
-  "name": "tcn-auditor",
+  "name": "tcn-bot-v3",
   "version": "1.0.0",
   "description": "",
   "type": "module",
@@ -7,16 +7,7 @@
   "scripts": {
     "start": "node index.js"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/hyper-neutrino/tcn-auditor.git"
-  },
   "author": "hyper-neutrino",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/hyper-neutrino/tcn-auditor/issues"
-  },
-  "homepage": "https://github.com/hyper-neutrino/tcn-auditor#readme",
   "dependencies": {
     "discord.js": "^14.3.0",
     "mongodb": "^4.9.1",
