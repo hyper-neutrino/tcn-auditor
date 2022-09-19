@@ -1,18 +1,19 @@
 import {
     ApplicationCommandOptionType,
     ApplicationCommandType,
+    ButtonStyle,
     Client,
     Colors,
+    ComponentType,
     IntentsBitField,
     InteractionType,
+    SnowflakeUtil,
 } from "discord.js";
 import fs from "fs";
 import { MongoClient } from "mongodb";
 import fetch from "node-fetch";
 
-process.on("uncaughtException", (error) => {
-    console.error(error);
-});
+process.on("uncaughtException", (error) => console.error(error));
 
 const config = JSON.parse(fs.readFileSync("config.json"));
 
@@ -32,7 +33,84 @@ const ephemeral = {
     required: false,
 };
 
+const PYRO = "<:pyro:1021232648351387668>";
+const HYDRO = "<:hydro:1021232713149190264>";
+const ANEMO = "<:anemo:1021232755608133712>";
+const ELECTRO = "<:electro:1021232812835213362>";
+const DENDRO = "<:dendro:1021232875665883196>";
+const CRYO = "<:cryo:1021232910268903434>";
+const GEO = "<:geo:1021232946289578004>";
+const OTHER = "<:other:1021233139856719932>";
+
+const SWORD = "<:sword:1021232974848589864>";
+const POLEARM = "<:polearm:1021233017055871006>";
+const CLAYMORE = "<:claymore:1021233053097525348>";
+const BOW = "<:bow:1021233074618515486>";
+const CATALYST = "<:catalyst:1021233107287937074>";
+const UNKNOWN = ":question:";
+
+const characters = {
+    albedo: [GEO, SWORD],
+    aloy: [CRYO, BOW],
+    amber: [PYRO, BOW],
+    itto: [GEO, CLAYMORE],
+    barbara: [HYDRO, CATALYST],
+    beidou: [ELECTRO, CLAYMORE],
+    bennett: [PYRO, SWORD],
+    chongyun: [CRYO, CLAYMORE],
+    collei: [DENDRO, BOW],
+    diluc: [PYRO, CLAYMORE],
+    diona: [CRYO, BOW],
+    dori: [ELECTRO, CLAYMORE],
+    eula: [CRYO, CLAYMORE],
+    fischl: [ELECTRO, BOW],
+    ganyu: [CRYO, BOW],
+    gorou: [GEO, BOW],
+    hutao: [PYRO, POLEARM],
+    jean: [ANEMO, SWORD],
+    kazuha: [ANEMO, SWORD],
+    kaeya: [CRYO, SWORD],
+    ayaka: [CRYO, SWORD],
+    ayato: [HYDRO, SWORD],
+    keqing: [ELECTRO, SWORD],
+    klee: [PYRO, CATALYST],
+    sara: [ELECTRO, BOW],
+    shinobu: [ELECTRO, SWORD],
+    lisa: [ELECTRO, CATALYST],
+    mona: [HYDRO, CATALYST],
+    ningguang: [GEO, CATALYST],
+    noelle: [GEO, CLAYMORE],
+    qiqi: [CRYO, SWORD],
+    raiden: [ELECTRO, POLEARM],
+    razor: [ELECTRO, CLAYMORE],
+    rosaria: [CRYO, POLEARM],
+    kokomi: [HYDRO, CATALYST],
+    sayu: [ANEMO, CLAYMORE],
+    shenhe: [CRYO, POLEARM],
+    heizou: [ANEMO, CATALYST],
+    sucrose: [ANEMO, CATALYST],
+    tartaglia: [HYDRO, BOW],
+    thoma: [PYRO, POLEARM],
+    tighnari: [DENDRO, BOW],
+    traveler: [OTHER, SWORD],
+    venti: [ANEMO, BOW],
+    xiangling: [PYRO, POLEARM],
+    xiao: [ANEMO, POLEARM],
+    xingqiu: [HYDRO, SWORD],
+    xinyan: [PYRO, CLAYMORE],
+    yae: [ELECTRO, CATALYST],
+    yanfei: [PYRO, CATALYST],
+    yelan: [HYDRO, BOW],
+    yoimiya: [PYRO, BOW],
+    yunjin: [GEO, POLEARM],
+    zhongli: [GEO, POLEARM],
+    dainsleif: [OTHER, UNKNOWN],
+};
+
 const none = ":white_check_mark: None";
+const _bar = "https://i.imgur.com/035xCzE.png";
+const bar = { image: { url: _bar } };
+const space = "<:space:1021233715751424060>";
 
 let guild_cache, hq;
 
@@ -130,6 +208,36 @@ async function audit() {
         table.get(key).add(item);
     };
 
+    const wrong_invites = [];
+
+    for (const guild of guilds) {
+        if (!guild.invite) {
+            wrong_invites.push(
+                `The invite for ${guild.name} (${guild.character}: \`${guild.id}\`) is missing.`
+            );
+        } else {
+            let invite;
+
+            try {
+                invite = await client.fetchInvite(guild.invite);
+            } catch {
+                wrong_invites.push(
+                    `The invite for ${guild.name} (${guild.character}: \`${guild.id}\`) is invalid (\`${guild.invite}\`).`
+                );
+
+                continue;
+            }
+
+            if (invite.guild.id != guild.id) {
+                wrong_invites.push(
+                    `The invite for ${guild.name} (${guild.character}: \`${guild.id}\`) points to the wrong server (\`${guild.invite}\` => \`${invite.id}\`).`
+                );
+            }
+        }
+    }
+
+    let role;
+
     for (const guild of guilds) {
         for (const key of ["owner", "advisor", "voter"]) {
             if (!guild[key]) continue;
@@ -140,8 +248,6 @@ async function audit() {
             } catch {
                 continue;
             }
-
-            let role;
 
             if ((role = a2d_servers.get(guild.id))) {
                 insert(expected, member.id, role);
@@ -156,6 +262,20 @@ async function audit() {
 
                 if (!member.roles.cache.has(role)) {
                     insert(desynced, member.id, `missing <@&${role}>`);
+                }
+            }
+        }
+    }
+
+    if ((role = a2d_positions.get("observer"))) {
+        for (const user of users) {
+            if (user.roles.includes("observer")) {
+                insert(expected, user.id, role);
+
+                const member = hq.members.cache.get(user.id);
+
+                if (member && !member.roles.cache.has(role)) {
+                    insert(desynced, user.id, `missing <@&${role}>`);
                 }
             }
         }
@@ -231,6 +351,12 @@ async function audit() {
                               )
                               .join(", ")}`
                         : none
+                }\n- Invalid Invites: ${
+                    wrong_invites.length > 0
+                        ? `\n${wrong_invites
+                              .map((line) => `${space}- ${line}`)
+                              .join("\n")}`
+                        : none
                 }`,
             },
             {
@@ -257,9 +383,9 @@ async function audit() {
                               ])
                               .map(
                                   ([member, errors]) =>
-                                      `    - ${member} (${member.user.tag} \`${
-                                          member.id
-                                      }\`): ${errors.join(", ")}`
+                                      `${space}- ${member} (${
+                                          member.user.tag
+                                      } \`${member.id}\`): ${errors.join(", ")}`
                               )
                               .join("\n")}`
                         : none
@@ -272,9 +398,433 @@ async function audit() {
                     : embed.description),
             embed),
             color: 0x2d3136,
-            image: { url: "https://i.imgur.com/035xCzE.png" },
+            ...bar,
         })),
     };
+}
+
+async function user_info(user) {
+    const member = hq.members.cache.get(user.id);
+
+    try {
+        let api_user;
+
+        try {
+            api_user = await api(`/users/${user.id}`);
+        } catch {}
+
+        const guilds = await api("/guilds");
+
+        let position;
+        let representing;
+
+        let exit = false;
+
+        for (const guild of guilds) {
+            for (const key of ["owner", "advisor"]) {
+                if (guild[key] == user.id) {
+                    if (position) {
+                        position =
+                            ":x: This user's position data contains errors. Use `/audit` to find all issues.";
+                        representing = null;
+                        exit = true;
+                        break;
+                    } else {
+                        position = `${
+                            {
+                                owner: "Server Owner",
+                                advisor: "Council Advisor",
+                            }[key]
+                        } of ${guild.name} (${characters[guild.character].join(
+                            " "
+                        )} ${guild.character}: \`${guild.id}\`)`;
+
+                        representing = guild;
+                    }
+                }
+            }
+
+            if (exit) break;
+        }
+
+        return {
+            embeds: [
+                {
+                    title: `User info for ${user.tag}`,
+                    fields: [
+                        {
+                            name: "Created",
+                            value: `${timestamp(user.createdAt)} (${timestamp(
+                                user.createdAt,
+                                "R"
+                            )})`,
+                        },
+                        {
+                            name: "Position",
+                            value: user.bot
+                                ? "This user is a bot."
+                                : position ??
+                                  "This user does not have a position.",
+                        },
+                        ...(api_user.roles.includes("observer")
+                            ? [
+                                  {
+                                      name: "Observer",
+                                      value: ":tools: This user is an **observer**.",
+                                  },
+                              ]
+                            : []),
+                        {
+                            name: "TCN Roles",
+                            value:
+                                api_user?.roles
+                                    .map((role) => `\`${role}\``)
+                                    .join(", ") || "(none)",
+                        },
+                    ],
+                    thumbnail: {
+                        url: user.displayAvatarURL({
+                            dynamic: true,
+                            size: 4096,
+                        }),
+                    },
+                    image: {
+                        url:
+                            user.bannerURL({
+                                dynamic: true,
+                                size: 4096,
+                            }) ?? _bar,
+                    },
+                },
+                ...(member
+                    ? [
+                          {
+                              title: `Member info for ${member.displayName}`,
+                              fields: [
+                                  {
+                                      name: "Joined",
+                                      value: `${timestamp(
+                                          member.joinedAt
+                                      )} (${timestamp(member.joinedAt, "R")})`,
+                                  },
+                                  {
+                                      name: "Server Roles",
+                                      value:
+                                          member.roles.cache
+                                              .toJSON()
+                                              .sort((a, b) =>
+                                                  b.comparePositionTo(a)
+                                              )
+                                              .map((role) => role.toString())
+                                              .join(" ") || "(none)",
+                                  },
+                              ],
+                              thumbnail: {
+                                  url: member.avatarURL({
+                                      dynamic: true,
+                                      size: 4096,
+                                  }),
+                              },
+                              ...bar,
+                          },
+                      ]
+                    : []),
+            ].map((embed) => ({ ...embed, color: 0x2d3136 })),
+            components:
+                representing || api_user.roles.includes("observer")
+                    ? [
+                          {
+                              type: ComponentType.ActionRow,
+                              components: [
+                                  ...(api_user.roles.includes("observer")
+                                      ? [
+                                            {
+                                                type: ComponentType.Button,
+                                                style: ButtonStyle.Secondary,
+                                                label: "Observer Info",
+                                                customId: "info.observers",
+                                            },
+                                        ]
+                                      : []),
+                                  ...(representing
+                                      ? [
+                                            {
+                                                type: ComponentType.Button,
+                                                style: ButtonStyle.Secondary,
+                                                label: `${representing.name} Server Info`,
+                                                customId: `info.server.${representing.id}`,
+                                            },
+                                        ]
+                                      : []),
+                              ],
+                          },
+                      ]
+                    : [],
+        };
+    } catch (error) {
+        console.error(error);
+
+        return {
+            embeds: [
+                {
+                    title: "ERROR",
+                    description: `An error occurred while attempting to fetch info for ${user}.`,
+                    color: Colors.Red,
+                },
+            ],
+        };
+    }
+}
+
+async function guild_info(id) {
+    let guild;
+
+    try {
+        guild = await api(`/guilds/${id}`);
+    } catch {
+        return {
+            embeds: [
+                {
+                    title: "ERROR",
+                    description: "That is not a valid server.",
+                    color: Colors.Red,
+                },
+            ],
+        };
+    }
+
+    try {
+        const created = Number(SnowflakeUtil.decode(guild.id).timestamp);
+
+        let owner, advisor;
+
+        try {
+            owner = await client.users.fetch(guild.owner);
+        } catch {}
+
+        try {
+            if (guild.advisor) {
+                advisor = await client.users.fetch(guild.advisor);
+            }
+        } catch {}
+
+        let invite;
+
+        try {
+            if (guild.invite) {
+                invite = await client.fetchInvite(guild.invite);
+            }
+        } catch {}
+
+        if (invite) {
+            invite = invite.guild.id == guild.id ? invite.code : null;
+        }
+
+        return {
+            embeds: [
+                {
+                    title: `Server Info for ${guild.name}`,
+                    fields: [
+                        {
+                            name: "Created",
+                            value: `${timestamp(created)} (${timestamp(
+                                created,
+                                "R"
+                            )})`,
+                        },
+                        {
+                            name: "Character",
+                            value: `${
+                                characters[guild.character]?.join(" ") ??
+                                "[missing data]"
+                            } ${guild.character ?? "[missing character]"}`,
+                        },
+                        {
+                            name: "Owner",
+                            value: owner
+                                ? `${owner} (${owner.tag} \`${owner.id}\`)${
+                                      guild.voter == owner.id
+                                          ? " :ballot_box:"
+                                          : ""
+                                  }`
+                                : ":x: Failed to fetch.",
+                        },
+                        {
+                            name: "Advisor",
+                            value: advisor
+                                ? `${advisor} (${advisor.tag} \`${
+                                      advisor.id
+                                  }\`)${
+                                      guild.voter == advisor.id
+                                          ? " :ballot_box:"
+                                          : ""
+                                  }`
+                                : "(none)",
+                        },
+                        ...(guild.voter != owner?.id &&
+                        guild.voter != advisor?.id
+                            ? [
+                                  {
+                                      name: "Voter",
+                                      value: "The voter for this server is missing! Use `/audit` to identify all issues.",
+                                  },
+                              ]
+                            : []),
+                        {
+                            name: "Invite",
+                            value: invite
+                                ? `[discord.gg/${invite}](https://discord.com/invite/${invite})`
+                                : "The invite for this server is missing, invalid, or incorrect! Use `/audit` to identify all issues.",
+                        },
+                    ],
+                },
+            ].map((embed) => ({
+                ...embed,
+                color: 0x2d3136,
+            })),
+            components:
+                owner || advisor
+                    ? [
+                          {
+                              type: ComponentType.ActionRow,
+                              components: [
+                                  ...(owner
+                                      ? [
+                                            {
+                                                type: ComponentType.Button,
+                                                style: ButtonStyle.Secondary,
+                                                label: "Owner Info",
+                                                customId: `info.user.${owner.id}`,
+                                            },
+                                        ]
+                                      : []),
+                                  ...(advisor
+                                      ? [
+                                            {
+                                                type: ComponentType.Button,
+                                                style: ButtonStyle.Secondary,
+                                                label: "Advisor Info",
+                                                customId: `info.user.${advisor.id}`,
+                                            },
+                                        ]
+                                      : []),
+                              ],
+                          },
+                      ]
+                    : [],
+        };
+    } catch (error) {
+        console.error(error);
+
+        return {
+            embeds: [
+                {
+                    title: "ERROR",
+                    description: `An error occurred while attempting to display info for ${guild.name}.`,
+                    color: Colors.Red,
+                },
+            ],
+        };
+    }
+}
+
+async function observers_info() {
+    try {
+        const observers = (await api("/users")).filter((user) =>
+            user.roles.includes("observer")
+        );
+
+        const users = new Map();
+
+        for (const api_user of observers) {
+            try {
+                users.set(api_user.id, await client.users.fetch(api_user.id));
+            } catch {}
+        }
+
+        const positions = new Map();
+
+        for (const guild of await api("/guilds")) {
+            for (const key of ["owner", "advisor"]) {
+                if (positions.has(guild[key])) {
+                    positions.set(
+                        guild[key],
+                        ":x: This user's position data contains errors. Use `/audit` to find all issues."
+                    );
+                } else {
+                    positions.set(
+                        guild[key],
+                        `${
+                            {
+                                owner: "Server Owner",
+                                advisor: "Council Advisor",
+                            }[key]
+                        } of ${guild.name} (${characters[guild.character].join(
+                            " "
+                        )} ${guild.character}: \`${guild.id}\`)`
+                    );
+                }
+            }
+        }
+
+        return {
+            embeds: [
+                {
+                    title: "Observers",
+                    description: "",
+                    fields: await Promise.all(
+                        observers.map((api_user) =>
+                            ((user) => ({
+                                name: `_ _\n${
+                                    user
+                                        ? `Info for **${user.tag}**`
+                                        : "**Missing User**"
+                                }`,
+                                value: `${
+                                    user
+                                        ? `${user} (${user.tag} \`${user.id}\`)`
+                                        : `Missing user with ID \`${api_user.id}\``
+                                }\n${positions.get(api_user.id)}`,
+                            }))(users.get(api_user.id))
+                        )
+                    ),
+                    color: 0x2d3136,
+                    ...bar,
+                },
+            ],
+            components: [
+                {
+                    type: ComponentType.ActionRow,
+                    components: [
+                        {
+                            type: ComponentType.SelectMenu,
+                            options: observers
+                                .map((api_user) => users.get(api_user.id))
+                                .filter((x) => x)
+                                .map((user) => ({
+                                    label: `Info: ${user.tag}`,
+                                    value: user.id,
+                                })),
+                            customId: "info.user",
+                        },
+                    ],
+                },
+            ],
+        };
+    } catch (error) {
+        console.error(error);
+
+        return {
+            embeds: [
+                {
+                    title: "ERROR",
+                    description:
+                        "An error occurred fetching or displaying the observer info.",
+                    color: Colors.Red,
+                },
+            ],
+        };
+    }
 }
 
 client.on("ready", async () => {
@@ -327,7 +877,12 @@ client.on("ready", async () => {
                             name: "position",
                             description: "the position to bind",
                             required: true,
-                            choices: ["owner", "advisor", "voter"].map((x) => ({
+                            choices: [
+                                "owner",
+                                "advisor",
+                                "voter",
+                                "observer",
+                            ].map((x) => ({
                                 name: x,
                                 value: x,
                             })),
@@ -344,9 +899,52 @@ client.on("ready", async () => {
                 },
             ],
         },
+        {
+            type: ApplicationCommandType.ChatInput,
+            name: "info",
+            description: "get TCN info for an entity",
+            dm_permission: false,
+            options: [
+                {
+                    type: ApplicationCommandOptionType.Subcommand,
+                    name: "user",
+                    description: "get TCN info for a user",
+                    options: [
+                        {
+                            type: ApplicationCommandOptionType.User,
+                            name: "user",
+                            description: "the user to fetch",
+                            required: true,
+                        },
+                        ephemeral,
+                    ],
+                },
+                {
+                    type: ApplicationCommandOptionType.Subcommand,
+                    name: "server",
+                    description: "get TCN info for a server",
+                    options: [
+                        {
+                            type: ApplicationCommandOptionType.String,
+                            name: "server",
+                            description: "the server to fetch",
+                            required: true,
+                            autocomplete: true,
+                        },
+                        ephemeral,
+                    ],
+                },
+                {
+                    type: ApplicationCommandOptionType.Subcommand,
+                    name: "observers",
+                    description: "get info on the current observers",
+                    options: [ephemeral],
+                },
+            ],
+        },
     ]);
 
-    console.log("TCN Auditor is ready!");
+    console.log("HQ Bot is ready!");
 });
 
 client.on("interactionCreate", async (cmd) => {
@@ -471,41 +1069,89 @@ client.on("interactionCreate", async (cmd) => {
                     },
                 ],
             });
-        }
-    } else if (cmd.type == InteractionType.ApplicationCommandAutocomplete) {
-        if (cmd.commandName == "bind") {
+        } else if (cmd.commandName == "info") {
             const sub = cmd.options.getSubcommand();
 
-            if (sub == "server") {
-                const focused = cmd.options.getFocused(true);
+            if (sub == "user") {
+                const user = cmd.options.getUser("user");
+                await user.fetch();
 
-                if (focused.name == "server") {
-                    if (focused.value || !guild_cache) {
-                        guild_cache = await api("/guilds");
-                    }
+                await cmd.editReply(await user_info(user));
+            } else if (sub == "server") {
+                await cmd.editReply(
+                    await guild_info(cmd.options.getString("server"))
+                );
+            } else if (sub == "observers") {
+                await cmd.editReply(await observers_info());
+            }
+        }
+    } else if (cmd.type == InteractionType.ApplicationCommandAutocomplete) {
+        const focused = cmd.options.getFocused(true);
 
-                    const query = focused.value.toLowerCase();
+        if (focused.name == "server") {
+            if (focused.value || !guild_cache) {
+                guild_cache = await api("/guilds");
+            }
 
-                    await cmd.respond(
-                        guild_cache
-                            .filter(
-                                (guild) =>
-                                    guild.name.toLowerCase().indexOf(query) !=
-                                        -1 ||
-                                    guild.character
-                                        .toLowerCase()
-                                        .indexOf(query) != -1
-                            )
-                            .map((guild) => ({
-                                name: `${guild.character}: ${guild.name}`,
-                                value: guild.id,
-                            }))
-                            .slice(0, 25)
-                    );
+            const query = focused.value.toLowerCase();
+
+            await cmd.respond(
+                guild_cache
+                    .filter(
+                        (guild) =>
+                            guild.name.toLowerCase().indexOf(query) != -1 ||
+                            guild.character.toLowerCase().indexOf(query) != -1
+                    )
+                    .map((guild) => ({
+                        name: `${guild.character}: ${guild.name}`,
+                        value: guild.id,
+                    }))
+                    .slice(0, 25)
+            );
+        }
+    } else if (cmd.type == InteractionType.MessageComponent) {
+        const args = cmd.customId.split(/\./);
+
+        if (args[0] == "info") {
+            if (args[1] == "user") {
+                await cmd.deferUpdate();
+
+                const uid =
+                    cmd.componentType == ComponentType.Button
+                        ? args[2]
+                        : cmd.values[0];
+
+                try {
+                    const user = await client.users.fetch(uid);
+                    await cmd.editReply(await user_info(user));
+                } catch (error) {
+                    await cmd.editReply({
+                        embeds: [
+                            {
+                                title: "ERROR",
+                                description: `Failed to fetch user with ID \`${uid}\`.`,
+                                color: Colors.Red,
+                            },
+                        ],
+                        ephemeral: true,
+                    });
+
+                    throw error;
                 }
+            } else if (args[1] == "server") {
+                await cmd.deferUpdate();
+                await cmd.editReply(await guild_info(args[2]));
+            } else if (args[1] == "observers") {
+                await cmd.deferUpdate();
+                await cmd.editReply(await observers_info());
             }
         }
     }
 });
+
+function timestamp(date, format = "F") {
+    date = date?.getTime?.() ?? date;
+    return `<t:${Math.floor(date / 1000)}${format ? `:${format}` : ""}>`;
+}
 
 client.login(config.discord_token);
